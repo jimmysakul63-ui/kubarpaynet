@@ -1,2 +1,2 @@
 # kubarpaynet
-databae management &amp; billing payment
+databae management & billing payment
