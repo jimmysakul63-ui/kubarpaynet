@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KUBARPAYNET - Maintenance</title>
+    <link rel="stylesheet" href="css/style.css">
+    <style>
+        .maintenance-message {
+            font-size: 16px;
+            line-height: 1.7;
+        }
+    </style>
+</head>
+<body class="login-body">
+    <div class="maintenance-page">
+        <div id="maintenanceAnnouncement" class="maintenance-banner" style="display:none;">
+            <div class="maintenance-announcement" id="maintenanceAnnouncementBlock">
+                <img id="maintenanceAnnouncementImage" src="img/maintenance-icon.png" alt="Maintenance" style="display:none;" />
+                <span id="maintenanceAnnouncementText"></span>
+            </div>
+        </div>
+        <h1>Pemberitahuan Maintenance</h1>
+        <p id="maintenanceMessage" class="maintenance-message">Memuat info jadwal...</p>
+        <div style="margin-top: 20px; display: flex; gap: 12px; flex-wrap: wrap;">
+            <button id="btnBackToLogin" class="btn-login-new">Kembali ke Login</button>
+            <button id="btnRefresh" class="btn-login-new">Periksa Kembali</button>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = "https://script.google.com/macros/s/AKfycbxLd-DgmQBVIjwgLHJSGgwEeI8z2ll3ShR4n6nzTpw0_JWAvYwAoARGEEjhbLiinXfP/exec";
+
+        function parseSchedule(raw) {
+            if (!raw) return null;
+            try {
+                const data = JSON.parse(raw);
+                if (!data || !data.date || !data.start || !data.end) return null;
+                return data;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function isActive(schedule) {
+            if (!schedule) return false;
+            const now = new Date();
+            const start = new Date(`${schedule.date}T${schedule.start}:00`);
+            let end = new Date(`${schedule.date}T${schedule.end}:00`);
+            if (end <= start) {
+                end = new Date(end.getTime() + 24 * 60 * 60 * 1000);
+            }
+            return now >= start && now <= end;
+        }
+
+        async function fetchMaintenanceSchedule() {
+            try {
+                const response = await fetch(`${API_URL}?aksi=ambilMaintenance`, {
+                    method: 'GET',
+                    mode: 'cors',
+                    headers: { 'Accept': 'application/json' }
+                });
+
+                if (!response.ok) {
+                    throw new Error('Gagal menghubungi backend. Status: ' + response.status);
+                }
+
+                const text = await response.text();
+                const data = parseSchedule(text);
+                if (data) {
+                    localStorage.setItem('maintenanceSchedule', JSON.stringify(data));
+                    return data;
+                }
+            } catch (error) {
+                console.warn('Fetch backend maintenance gagal, gunakan fallback lokal:', error);
+            }
+            return parseSchedule(localStorage.getItem('maintenanceSchedule'));
+        }
+
+        async function tampilkan() {
+            const msgEl = document.getElementById('maintenanceMessage');
+            const announcementEl = document.getElementById('maintenanceAnnouncement');
+            const announcementTextEl = document.getElementById('maintenanceAnnouncementText');
+            const schedule = await fetchMaintenanceSchedule();
+            const aktif = isActive(schedule);
+
+            if (!schedule) {
+                announcementEl.style.display = 'none';
+                msgEl.innerHTML = 'Saat ini tidak ada jadwal maintenance yang terdaftar. Silakan kembali ke <a href="login.html">login</a>.';
+                return;
+            }
+
+            announcementEl.style.display = 'block';
+            announcementTextEl.innerHTML = aktif ? 'Sistem sedang dalam perbaikan, harap kembali nanti.' : 'Ada jadwal maintenance mendatang.';
+
+            const imageEl = document.getElementById('maintenanceAnnouncementImage');
+            imageEl.style.display = 'block';
+            imageEl.style.margin = '0 auto';
+            imageEl.style.maxWidth = '180px';
+
+            const formatMaintenanceDate = (value) => {
+            if (!value) return '-';
+            const parsed = new Date(value);
+            if (!isNaN(parsed)) return parsed.toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' });
+            return String(value);
+        };
+
+        const formatMaintenanceTime = (value) => {
+            if (!value) return '-';
+            if (/^\d{2}:\d{2}(:\d{2})?$/.test(value)) return value;
+            const parsed = new Date(value);
+            if (!isNaN(parsed)) return parsed.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+            return String(value);
+        };
+
+        const tanggal = formatMaintenanceDate(schedule.date);
+        const jam = `${formatMaintenanceTime(schedule.start)} - ${formatMaintenanceTime(schedule.end)}`;
+        const catatan = schedule.note ? '<br><strong>Catatan:</strong> ' + schedule.note : '';
+
+        if (aktif) {
+            msgEl.innerHTML = `Sistem sedang dalam maintenance pada <strong>${tanggal}</strong> pukul <strong>${jam}</strong>.${catatan}<br>Silakan kembali lagi setelah jadwal selesai.`;
+        } else {
+            msgEl.innerHTML = `Jadwal maintenance terdaftar pada <strong>${tanggal}</strong> pukul <strong>${jam}</strong>.<br>Catatan: ${schedule.note || '-'}<br><br>Saat ini tidak dalam periode maintenance. Anda dapat melanjutkan ke <a href="login.html">login</a> jika perlu.`;
+        }
+        }
+
+        document.getElementById('btnBackToLogin').addEventListener('click', () => {
+            window.location.href = 'login.html';
+        });
+        document.getElementById('btnRefresh').addEventListener('click', () => {
+            tampilkan();
+        });
+
+        tampilkan();
+    </script>
+</body>
+</html>
